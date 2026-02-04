@@ -1,0 +1,171 @@
+﻿<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+    <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+<ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{C456684A-56CF-E654-655D-98A564BE152D}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>InteractivePipeSmokingVR</RootNamespace>
+ <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <SccProjectName>
+    </SccProjectName>
+    <SccLocalPath>
+    </SccLocalPath>
+    <SccProvider>
+    </SccProvider>
+    <ProjectName>InteractivePipeSmokingVR</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+ <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <TargetName>InteractivePipeSmokingVR</TargetName>
+    <OutDir>..\..\..\..\..\..\SkyrimVR\Data\skse\plugins</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <TargetName>InteractivePipeSmokingVR</TargetName>
+    <LibraryPath>$(MsBuildProjectDirectory)\lib;$(LibraryPath);</LibraryPath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(MsBuildProjectDirectory)\lib;$(MsBuildProjectDirectory)\include;$(MsBuildProjectDirectory)\include\bindings\cpp;</IncludePath>
+ <SourcePath>$(VC_SourcePath);$(MsBuildProjectDirectory)\lib;</SourcePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;_USRDLL;InteractivePipeSmokingVR_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)\..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ForcedIncludeFiles>common/IPrefix.h</ForcedIncludeFiles>
+   <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    <AdditionalDependencies>version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ModuleDefinitionFile>InteractivePipeSmokingVR.def</ModuleDefinitionFile>
+    </Link>
+    <PostBuildEvent>
+      <Command>copy "$(TargetPath)" "$(SkyrimVRPath)\$(TargetFileName)" /Y</Command>
+    </PostBuildEvent>
+    <PostBuildEvent>
+   <Message>Installing Interactive Pipe Smoking VR...</Message>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+<Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+ <PreprocessorDefinitions>NDEBUG;_WINDOWS;_USRDLL;InteractivePipeSmokingVR_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)\..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ForcedIncludeFiles>common/IPrefix.h</ForcedIncludeFiles>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+  <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>delayimp.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+   <ModuleDefinitionFile>InteractivePipeSmokingVR.def</ModuleDefinitionFile>
+      <DelayLoadDLLs>
+   </DelayLoadDLLs>
+      <RandomizedBaseAddress>
+      </RandomizedBaseAddress>
+    </Link>
+    <PostBuildEvent>
+      <Command>
+      </Command>
+    </PostBuildEvent>
+    <PostBuildEvent>
+ <Message>
+  </Message>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="config.cpp" />
+    <ClCompile Include="Engine.cpp" />
+    <ClCompile Include="EquipState.cpp" />
+    <ClCompile Include="Haptics.cpp" />
+    <ClCompile Include="Helper.cpp" />
+    <ClCompile Include="higgsinterface001.cpp" />
+    <ClCompile Include="PipeCrafting.cpp" />
+    <ClCompile Include="RandomSelector.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="SkyrimVRESLAPI.cpp" />
+    <ClCompile Include="SmokableIngredients.cpp" />
+    <ClCompile Include="SmokingMechanics.cpp" />
+    <ClCompile Include="vrikinterface001.cpp" />
+    <ClCompile Include="VRInputTracker.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\common\common_vc14.vcxproj">
+      <Project>{472e19ab-def0-42df-819b-18722e8dc822}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\skse64\skse64.vcxproj">
+      <Project>{639411c0-fc23-4819-a0c5-429a4e5d8a51}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\skse64_common\skse64_common.vcxproj">
+      <Project>{5fd1c08d-db80-480c-a1c6-f0920005cd13}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="config.h" />
+    <ClInclude Include="dirent.h" />
+    <ClInclude Include="Engine.h" />
+    <ClInclude Include="EquipState.h" />
+    <ClInclude Include="Haptics.h" />
+    <ClInclude Include="Helper.h" />
+    <ClInclude Include="higgsinterface001.h" />
+    <ClInclude Include="PipeCrafting.h" />
+    <ClInclude Include="SkyrimVRESLAPI.h" />
+    <ClInclude Include="SmokableIngredients.h" />
+    <ClInclude Include="SmokingMechanics.h" />
+    <ClInclude Include="Utility.hpp" />
+    <ClInclude Include="vrikinterface001.h" />
+    <ClInclude Include="VRInputTracker.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="InteractivePipeSmokingVR.def" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

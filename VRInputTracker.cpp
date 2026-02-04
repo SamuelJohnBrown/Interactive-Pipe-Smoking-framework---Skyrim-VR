@@ -184,6 +184,10 @@ namespace InteractivePipeSmokingVR
 		m_prevRightNearFace = false;
 		m_controllersTouching = false;
 		m_prevControllersTouching = false;
+		m_controllersNearForPipeFilling = false;
+		m_controllersNearForSmokeRolling = false;
+		m_controllersNearForPipeLighting = false;
+		m_controllersNearForRolledSmokeLighting = false;
 		m_fireSpellLeftHand = false;
 		m_fireSpellRightHand = false;
 		m_prevFireSpellLeftHand = false;
@@ -480,8 +484,32 @@ namespace InteractivePipeSmokingVR
 		// Calculate distance between controllers
 		float controllerDistance = GetControllerToControllerDistance();
 
-		// Use configurable radius
-		m_controllersTouching = (controllerDistance <= configControllerTouchRadius);
+		// Use larger radius for rolled smoke lighting with fire spell
+		// This only affects the lighting detection - other actions (pipe filling, smoke rolling) use normal radius
+		float effectiveRadius = configControllerTouchRadius;
+		
+		bool hasUnlitRolledSmoke = m_unlitRolledSmokeInLeftHand || m_unlitRolledSmokeInRightHand;
+		bool hasFireSpell = m_fireSpellLeftHand || m_fireSpellRightHand;
+		
+		if (hasUnlitRolledSmoke && hasFireSpell)
+		{
+			// Use larger radius for rolled smoke lighting
+			effectiveRadius = configRolledSmokeLightingRadius;
+		}
+
+		m_controllersTouching = (controllerDistance <= effectiveRadius);
+
+		// Separate check for pipe filling with its own radius
+		m_controllersNearForPipeFilling = (controllerDistance <= configPipeFillingRadius);
+
+		// Separate check for smoke rolling with its own radius
+		m_controllersNearForSmokeRolling = (controllerDistance <= configSmokeRollingRadius);
+
+		// Separate check for pipe lighting with its own radius
+		m_controllersNearForPipeLighting = (controllerDistance <= configPipeLightingRadius);
+
+		// Separate check for rolled smoke lighting with its own (larger) radius
+		m_controllersNearForRolledSmokeLighting = (controllerDistance <= configRolledSmokeLightingRadius);
 
 		// Log when controllers start/stop touching
 		if (m_controllersTouching && !m_prevControllersTouching)
@@ -491,7 +519,7 @@ namespace InteractivePipeSmokingVR
 		else if (!m_controllersTouching && m_prevControllersTouching)
 		{
 			// Reset the global flag when controllers stop touching
-			g_controllersTouchingLongEnough = false;
+		 g_controllersTouchingLongEnough = false;
 		}
 		// Update global flag for controllers touching long enough
 		if (m_controllersTouching)
@@ -827,7 +855,7 @@ namespace InteractivePipeSmokingVR
 				if (IsHerbWoodenPipeWeapon(rightItem->formID))
 					isWoodenPipe = true;
 				else if (IsHerbBonePipeWeapon(rightItem->formID))
-					isBonePipe = true;
+				 isBonePipe = true;
 			}
 			
 			if (isWoodenPipe)
@@ -966,20 +994,20 @@ namespace InteractivePipeSmokingVR
 			if (leftItem)
 			{
 				if (IsWoodenPipeLitWeapon(leftItem->formID))
-					isWoodenPipeLit = true;
+				 isWoodenPipeLit = true;
 				else if (IsBonePipeLitWeapon(leftItem->formID))
-					isBonePipeLit = true;
+				 isBonePipeLit = true;
 				else if (IsRolledSmokeLitWeapon(leftItem->formID))
-					isRolledSmokeLit = true;
+				 isRolledSmokeLit = true;
 			}
 			if (rightItem && !isWoodenPipeLit && !isBonePipeLit && !isRolledSmokeLit)
 			{
 				if (IsWoodenPipeLitWeapon(rightItem->formID))
-					isWoodenPipeLit = true;
+				 isWoodenPipeLit = true;
 				else if (IsBonePipeLitWeapon(rightItem->formID))
-					isBonePipeLit = true;
+				 isBonePipeLit = true;
 				else if (IsRolledSmokeLitWeapon(rightItem->formID))
-					isRolledSmokeLit = true;
+				 isRolledSmokeLit = true;
 			}
 			
 			if (isWoodenPipeLit)
@@ -1034,11 +1062,25 @@ namespace InteractivePipeSmokingVR
 		bool hasFireSpell = m_fireSpellLeftHand || m_fireSpellRightHand;
 
 		// Check if we have a lightable item (herb pipe or unlit rolled smoke) in either hand
-		bool hasLightableItem = m_herbPipeInLeftHand || m_herbPipeInRightHand ||
-			m_unlitRolledSmokeInLeftHand || m_unlitRolledSmokeInRightHand;
+		bool hasHerbPipe = m_herbPipeInLeftHand || m_herbPipeInRightHand;
+		bool hasUnlitRolledSmoke = m_unlitRolledSmokeInLeftHand || m_unlitRolledSmokeInRightHand;
+		bool hasLightableItem = hasHerbPipe || hasUnlitRolledSmoke;
 
-		// Lighting condition: fire spell + lightable item + controllers touching (no timer needed)
-		m_lightingConditionMet = hasFireSpell && hasLightableItem && m_controllersTouching;
+		// Lighting condition uses different radius based on item type:
+		// - Herb pipes use configPipeLightingRadius
+		// - Rolled smokes use configRolledSmokeLightingRadius (larger)
+		bool controllersNearEnough = false;
+		if (hasHerbPipe)
+		{
+			controllersNearEnough = m_controllersNearForPipeLighting;
+		}
+		else if (hasUnlitRolledSmoke)
+		{
+			controllersNearEnough = m_controllersNearForRolledSmokeLighting;
+		}
+
+		// Lighting condition: fire spell + lightable item + controllers near enough
+		m_lightingConditionMet = hasFireSpell && hasLightableItem && controllersNearEnough;
 
 		// Log and start timer when lighting condition is first met
 		if (m_lightingConditionMet && !m_prevLightingConditionMet)
@@ -1075,7 +1117,9 @@ namespace InteractivePipeSmokingVR
 			_MESSAGE("[Lighting] *** LIGHTING CONDITION MET! ***");
 			_MESSAGE("[Lighting]   -> Fire spell in %s hand", fireHand);
 			_MESSAGE("[Lighting]   -> %s in %s hand", itemType, itemHand);
-			_MESSAGE("[Lighting]   -> Controllers touching: YES");
+			_MESSAGE("[Lighting]   -> Using %s lighting radius: %.1f", 
+				hasHerbPipe ? "PIPE" : "ROLLED SMOKE",
+				hasHerbPipe ? configPipeLightingRadius : configRolledSmokeLightingRadius);
 			_MESSAGE("[Lighting]   -> Haptic feedback started - sound will play after 0.6 seconds, light after 3 seconds!");
 		}
 		else if (!m_lightingConditionMet && m_prevLightingConditionMet)

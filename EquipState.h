@@ -61,11 +61,23 @@ namespace InteractivePipeSmokingVR
 		// This unequips the dummy weapon - armor is auto-handled by equip event handlers
 		void UnequipCurrentSmokable(bool fromLeftVRController);
 
-		// Equip empty wooden pipe (for crafting completion)
+		// Add empty wooden pipe to inventory (for pre-loading during crafting)
+		void AddEmptyWoodenPipeToInventory();
+
+		// Add empty bone pipe to inventory (for pre-loading during crafting)
+		void AddEmptyBonePipeToInventory();
+
+		// Equip empty wooden pipe (for crafting completion) - adds to inventory and equips
 		void EquipEmptyWoodenPipe(bool inLeftHand);
 
-		// Equip empty bone pipe (for crafting)
+		// Equip empty bone pipe (for crafting) - adds to inventory and equips
 		void EquipEmptyBonePipe(bool inLeftHand);
+
+		// Equip empty wooden pipe that's already in inventory (for crafting completion)
+		void EquipEmptyWoodenPipeFromInventory(bool inLeftHand);
+
+		// Equip empty bone pipe that's already in inventory (for crafting completion)
+		void EquipEmptyBonePipeFromInventory(bool inLeftHand);
 
 		// Equip unlit rolled smoke (for smoke rolling)
 		void EquipUnlitRolledSmoke(bool inLeftHand);

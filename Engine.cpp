@@ -900,7 +900,7 @@ namespace InteractivePipeSmokingVR
 		
 		if (!holdingSmokable)
 		{
-			g_pipeFillingConditionLogged = false; // Reset when not holding
+			g_pipeFillingConditionLogged = false;
 			return;
 		}
 
@@ -915,8 +915,10 @@ namespace InteractivePipeSmokingVR
 			return;
 		}
 
-		// Check if controllers have been touching long enough
-		if (g_controllersTouchingLongEnough)
+		// Check if controllers are near enough for pipe filling (uses separate radius)
+		bool controllersNearForFilling = g_vrInputTracker && g_vrInputTracker->AreControllersNearForPipeFilling();
+		
+		if (controllersNearForFilling)
 		{
 			// All conditions met - trigger continuous weak haptic feedback on pipe hand
 			// This signals "ready to fill" - player must DROP the smokable to actually fill
@@ -943,7 +945,7 @@ namespace InteractivePipeSmokingVR
 				_MESSAGE("[PipeFill]   -> Empty pipe equipped: %s hand", emptyPipeInLeft ? "LEFT" : "RIGHT");
 				_MESSAGE("[PipeFill]   -> Smokable held: '%s' (FormID: %08X)", smokableName, smokableFormId);
 				_MESSAGE("[PipeFill]   -> Smokable category: %s", SmokableIngredients::GetCategoryName(smokableCategory));
-				_MESSAGE("[PipeFill]   -> Controllers touching long enough: YES");
+				_MESSAGE("[PipeFill]   -> Controllers near for filling: YES");
 				_MESSAGE("[PipeFill]   -> Continuous haptic feedback started - DROP to fill!");
 			}
 		}
@@ -1092,15 +1094,22 @@ namespace InteractivePipeSmokingVR
 			bool emptyPipeInRight = g_emptyPipeEquippedRight || g_emptyBonePipeEquippedRight || g_emptyWoodenPipeEquippedRight;
 			bool anyEmptyPipeEquipped = emptyPipeInLeft || emptyPipeInRight;
 
-			bool controllersTouching = g_vrInputTracker && g_vrInputTracker->AreControllersTouching();
+			bool hasRollOfPaperLeft = (g_heldRollOfPaperLeft != nullptr);
+			bool hasRollOfPaperRight = (g_heldRollOfPaperRight != nullptr);
+			bool holdingRollOfPaper = hasRollOfPaperLeft || hasRollOfPaperRight;
+
+			bool controllersNearForFilling = g_vrInputTracker && g_vrInputTracker->AreControllersNearForPipeFilling();
+			bool controllersNearForSmokeRolling = g_vrInputTracker && g_vrInputTracker->AreControllersNearForSmokeRolling();
 
 			// Debug logging
-			_MESSAGE("[HIGGS Drop DEBUG] emptyPipeInLeft=%d emptyPipeInRight=%d anyEmptyPipeEquipped=%d controllersTouching=%d g_controllersTouchingLongEnough=%d",
+			_MESSAGE("[HIGGS Drop DEBUG] emptyPipeInLeft=%d emptyPipeInRight=%d anyEmptyPipeEquipped=%d controllersNearForFilling=%d",
 				emptyPipeInLeft ? 1 : 0, emptyPipeInRight ? 1 : 0, anyEmptyPipeEquipped ? 1 : 0, 
-				controllersTouching ? 1 : 0, g_controllersTouchingLongEnough ? 1 : 0);
+				controllersNearForFilling ? 1 : 0);
+			_MESSAGE("[HIGGS Drop DEBUG] holdingRollOfPaper=%d controllersNearForSmokeRolling=%d",
+				holdingRollOfPaper ? 1 : 0, controllersNearForSmokeRolling ? 1 : 0);
 
-			// Pipe fills when: empty pipe equipped AND controllers are touching (instant check, no 2 sec wait needed on drop)
-			if (anyEmptyPipeEquipped && controllersTouching)
+			// Pipe fills when: empty pipe equipped AND controllers are near enough (uses pipe filling radius)
+			if (anyEmptyPipeEquipped && controllersNearForFilling)
 			{
 				// PIPE FILL - scale to 0 to hide the ingredient
 				const char* smokableName = "Unknown";
@@ -1137,10 +1146,13 @@ namespace InteractivePipeSmokingVR
 				// Scale the dropped ingredient to 0 (makes it disappear visually)
 				ShrinkSmokableIngredient(droppedSmokable, 0.0f);
 				_MESSAGE("[PipeFill]   -> Scaled ingredient to 0 (hidden)");
+				
+				// Delete the world object to clean it up properly
+				DeleteWorldObject(droppedSmokable);
 
 				// Trigger stronger haptic feedback on the hand with the empty pipe to confirm fill
 				TriggerHapticFeedback(emptyPipeInLeft, emptyPipeInRight, 0.5f, 0.3f);
-				_MESSAGE("[PipeFill]   -> Haptic feedback triggered on %s hand!", emptyPipeInLeft ? "LEFT" : "RIGHT");
+				_MESSAGE("[PipeFill] -> Haptic feedback triggered on %s hand!", emptyPipeInLeft ? "LEFT" : "RIGHT");
 
 				// Unequip and remove the empty pipe dummy weapon, equip herb-filled pipe
 				if (g_equipStateManager)
@@ -1148,11 +1160,89 @@ namespace InteractivePipeSmokingVR
 					g_equipStateManager->UnequipAndRemoveEmptyPipe(emptyPipeInLeft, emptyPipeInRight);
 				}
 			}
+			// Smoke rolling: dropping smokable while holding Roll of Paper + controllers near enough
+			else if (holdingRollOfPaper && controllersNearForSmokeRolling)
+			{
+				// SMOKE ROLLING - create rolled smoke
+				const char* smokableName = "Unknown";
+				UInt32 smokableFormId = 0;
+				SmokableCategory smokableCategory = SmokableCategory::None;
+
+				if (droppedSmokable->baseForm)
+				{
+					smokableFormId = droppedSmokable->baseForm->formID;
+					smokableName = SmokableIngredients::GetSmokableName(smokableFormId);
+					smokableCategory = SmokableIngredients::GetCategory(smokableFormId);
+				}
+
+				_MESSAGE("[SmokeRolling] *** SMOKE ROLLED! ***");
+				_MESSAGE("[SmokeRolling]   -> Roll of Paper in %s hand", hasRollOfPaperLeft ? "LEFT" : "RIGHT");
+				_MESSAGE("[SmokeRolling]   -> Smokable used: '%s' (FormID: %08X)", smokableName, smokableFormId);
+				_MESSAGE("[SmokeRolling]   -> Smokable category: %s", SmokableIngredients::GetCategoryName(smokableCategory));
+
+				// Store the smokable ingredient info in the ROLLED SMOKE specific cache
+				g_filledRolledSmokeSmokableFormId = smokableFormId;
+				g_filledRolledSmokeSmokableCategory = smokableCategory;
+				_MESSAGE("[SmokeRolling] -> Stored in ROLLED SMOKE cache: '%s' (%s)", smokableName, SmokableIngredients::GetCategoryName(smokableCategory));
+
+				// Scale the dropped smokable ingredient to 0 (makes it disappear visually)
+				ShrinkSmokableIngredient(droppedSmokable, 0.0f);
+				_MESSAGE("[SmokeRolling]   -> Scaled smokable ingredient to 0 (hidden)");
+				
+				// Delete the smokable world object to clean it up properly
+				DeleteWorldObject(droppedSmokable);
+
+				// Scale the Roll of Paper to 0 (makes it disappear visually)
+				TESObjectREFR* rollOfPaper = hasRollOfPaperLeft ? g_heldRollOfPaperLeft : g_heldRollOfPaperRight;
+				if (rollOfPaper)
+				{
+					ShrinkSmokableIngredient(rollOfPaper, 0.0f);
+					_MESSAGE("[SmokeRolling]   -> Scaled Roll of Paper to 0 (hidden)");
+					
+					// Delete the roll of paper world object to clean it up properly
+					DeleteWorldObject(rollOfPaper);
+				}
+
+				// Trigger haptic feedback on the hand with the Roll of Paper to confirm
+				TriggerHapticFeedback(hasRollOfPaperLeft, hasRollOfPaperRight, 0.5f, 0.3f);
+				_MESSAGE("[SmokeRolling]   -> Haptic feedback triggered on %s hand!", hasRollOfPaperLeft ? "LEFT" : "RIGHT");
+
+				// Clear Roll of Paper tracking
+				if (hasRollOfPaperLeft)
+				{
+					g_heldRollOfPaperLeft = nullptr;
+					g_rollOfPaperHeldLeft = false;
+				}
+				if (hasRollOfPaperRight)
+				{
+					g_heldRollOfPaperRight = nullptr;
+					g_rollOfPaperHeldRight = false;
+				}
+
+				// Equip the unlit rolled smoke to the hand that was holding the Roll of Paper
+				if (g_equipStateManager)
+				{
+					// hasRollOfPaperLeft refers to VR controller (HIGGS), need to convert to game hand
+					bool equipToGameLeftHand;
+					if (IsLeftHandedMode())
+					{
+						// In left-handed mode: left VR = right game, right VR = left game
+						equipToGameLeftHand = hasRollOfPaperRight;
+					}
+					else
+					{
+						// Normal mode: left VR = left game
+						equipToGameLeftHand = hasRollOfPaperLeft;
+					}
+					g_equipStateManager->EquipUnlitRolledSmoke(equipToGameLeftHand);
+					_MESSAGE("[SmokeRolling]   -> Equipping Unlit Rolled Smoke to %s game hand", equipToGameLeftHand ? "LEFT" : "RIGHT");
+				}
+			}
 			else
 			{
-				// PIPE FILL CONDITION NOT MET - restore ingredient to default scale
+				// NEITHER PIPE FILL NOR SMOKE ROLLING - restore ingredient to default scale
 				ShrinkSmokableIngredient(droppedSmokable, 1.0f);
-				_MESSAGE("[HIGGS Drop] Restored smokable to default scale (pipe fill conditions not met)");
+				_MESSAGE("[HIGGS Drop] Restored smokable to default scale (conditions not met)");
 			}
 		}
 
@@ -1310,17 +1400,17 @@ namespace InteractivePipeSmokingVR
 				_MESSAGE("[HIGGS Grab] *** PIPE FILL CONDITION MET! ***");
 				_MESSAGE("[HIGGS Grab]   -> Empty pipe equipped: YES");
 				_MESSAGE("[HIGGS Grab]   -> Smokable grabbed: '%s'", smokableName);
-				_MESSAGE("[HIGGS Grab]   -> Controllers touching long enough: YES");
+				_MESSAGE("[HIGGS Grab]   -> Controllers near for filling long enough: YES");
 			}
-			else if (g_vrInputTracker && g_vrInputTracker->AreControllersTouching())
+			else if (g_vrInputTracker && g_vrInputTracker->AreControllersNearForPipeFilling())
 			{
 				int touchDurationMs = g_vrInputTracker->GetControllersTouchingDurationMs();
-				_MESSAGE("[HIGGS Grab]   -> Controllers touching but not long enough (%d ms / %d ms required)",
+				_MESSAGE("[HIGGS Grab]   -> Controllers near for filling but not long enough (%d ms / %d ms required)",
 					touchDurationMs, configControllerTouchDurationMs);
 			}
 			else
 			{
-				_MESSAGE("[HIGGS Grab]   -> Controllers NOT touching (need to touch for %d ms)", configControllerTouchDurationMs);
+				_MESSAGE("[HIGGS Grab]   -> Controllers NOT near for filling (need to touch for %d ms)", configControllerTouchDurationMs);
 			}
 		}
 		// Non-smokable items are silently ignored
@@ -1428,8 +1518,13 @@ namespace InteractivePipeSmokingVR
 			// Register death event sink to reset state on player death
 			RegisterDeathEventSink();
 
-			// Register HIGGS grab callback to detect grabs while empty pipe equipped
+			// Register HIGGS grab callbacks (for pipe filling, smoke rolling, etc.)
+			// This must happen AFTER ESP is loaded so form IDs are resolved
 			RegisterHiggsGrabCallback();
+			
+			// Initialize pipe crafting system (registers HIGGS callbacks for crafting)
+			// This also must happen AFTER ESP is loaded
+			InitializePipeCrafting();
 		}
 		
 		// Cache the original VRIK nearClipDistance for later restoration

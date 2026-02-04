@@ -14,6 +14,56 @@ namespace InteractivePipeSmokingVR
 	// External task interface from main.cpp
 	extern SKSETaskInterface* g_task;
 
+	// Helper: check if player has an item (form) in inventory
+	static bool PlayerHasItemInInventory(Actor* player, UInt32 formId)
+	{
+		if (!player || formId == 0)
+			return false;
+
+		TESForm* form = LookupFormByID(formId);
+		if (!form)
+			return false;
+
+		ExtraContainerChanges* containerChanges = static_cast<ExtraContainerChanges*>(player->extraData.GetByType(kExtraData_ContainerChanges));
+		if (!containerChanges || !containerChanges->data)
+			return false;
+
+		InventoryEntryData* entry = containerChanges->data->FindItemEntry(form);
+		if (!entry)
+			return false;
+
+		// entry->countDelta is the count in inventory (may be negative for removed)
+		return entry->countDelta > 0;
+	}
+
+	// Helper: check if player already has an empty pipe (either equipped or in inventory)
+	static bool PlayerHasEmptyPipeOfType(Actor* player, bool wooden)
+	{
+		if (!player)
+			return false;
+
+		// Check equipped items first
+		TESForm* left = player->GetEquippedObject(true);
+		TESForm* right = player->GetEquippedObject(false);
+		if (left)
+		{
+			if (wooden && IsEmptyWoodenPipeWeapon(left->formID)) return true;
+			if (!wooden && IsEmptyBonePipeWeapon(left->formID)) return true;
+		}
+		if (right)
+		{
+			if (wooden && IsEmptyWoodenPipeWeapon(right->formID)) return true;
+			if (!wooden && IsEmptyBonePipeWeapon(right->formID)) return true;
+		}
+
+		// Check inventory
+		UInt32 checkFormId = wooden ? g_emptyWoodenPipeWeaponFullFormId : g_emptyBonePipeWeaponFullFormId;
+		if (checkFormId !=0 && PlayerHasItemInInventory(player, checkFormId))
+			return true;
+
+		return false;
+	}
+
 	// ============================================
 	// Delayed Equip Armor Task (runs on game thread after delay)
 	// ============================================
@@ -143,6 +193,19 @@ namespace InteractivePipeSmokingVR
 			_MESSAGE("[EquipState] Queued weapon equip task after %dms delay for weapon %08X to %s hand", 
 				delayMs, weaponFormId, equipToLeftHand ? "LEFT" : "RIGHT");
 		}
+	}
+
+	// Thread function to set weapon display name after a delay (after equip completes)
+	static void DelayedSetWeaponNameThread(UInt32 weaponFormId, const char* baseName, SmokableCategory category, int delayMs)
+	{
+		// Copy the base name since it might go out of scope
+		std::string baseNameCopy(baseName);
+		
+		std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+		
+		// Set the weapon display name on the main thread via task
+		SetWeaponDisplayName(weaponFormId, baseNameCopy.c_str(), category);
+		_MESSAGE("[WeaponName] Delayed set weapon %08X name after %dms", weaponFormId, delayMs);
 	}
 
 	// ============================================
@@ -482,69 +545,41 @@ namespace InteractivePipeSmokingVR
 		g_emptyBonePipeEquippedRight = false;
 		_MESSAGE("[EquipState] Cleared empty pipe equipped flags");
 
-		// Set the display name with category suffix BEFORE equipping
-		_MESSAGE("[PipeFill] About to set display name: herbWeaponFormId=%08X, baseName='%s', category=%d (%s)",
-			herbWeaponFormId, herbPipeBaseName, static_cast<int>(smokableCategory), 
-			SmokableIngredients::GetCategoryName(smokableCategory));
-		
-		if (herbWeaponFormId != 0 && smokableCategory != SmokableCategory::None)
-		{
-			SetWeaponDisplayName(herbWeaponFormId, herbPipeBaseName, smokableCategory);
-		}
-		else
-		{
-			_MESSAGE("[PipeFill] WARNING: Skipping SetWeaponDisplayName - herbWeaponFormId=%08X, category=%d",
-				herbWeaponFormId, static_cast<int>(smokableCategory));
-		}
-
 		// Now add and equip the herb-filled pipe to the same hand
 		if (herbWeaponFormId != 0)
 		{
-			Actor* player = (*g_thePlayer);
-			if (player)
+			TESForm* herbWeaponForm = LookupFormByID(herbWeaponFormId);
+			if (herbWeaponForm)
 			{
-				TESForm* herbWeaponForm = LookupFormByID(herbWeaponFormId);
-				if (herbWeaponForm)
+				Actor* player = *g_thePlayer;
+				if (player)
 				{
 					TESObjectREFR* playerRef = static_cast<TESObjectREFR*>(player);
-					
-					// Add the herb pipe to inventory (silent)
+
+					// Add herb-filled pipe to inventory (silent)
 					AddItem_Native(nullptr, 0, playerRef, herbWeaponForm, 1, true);
-					_MESSAGE("[PipeFill] Added %s weapon %08X to inventory (silent)", herbPipeName, herbWeaponFormId);
+					_MESSAGE("[PipeFill] Added %s weapon %08X to inventory (silent)", herbPipeBaseName, herbWeaponFormId);
 
-					// wasInLeftHand refers to VR controller, need to convert to game hand
-					bool equipToGameLeftHand;
-					if (IsLeftHandedMode())
-					{
-						// In left-handed mode: left VR controller = right game hand
-						equipToGameLeftHand = !wasInLeftHand;
-						_MESSAGE("[PipeFill]   -> Left-handed mode: VR %s -> Game %s", 
-							wasInLeftHand ? "LEFT" : "RIGHT",
-							equipToGameLeftHand ? "LEFT" : "RIGHT");
-					}
-					else
-					{
-						equipToGameLeftHand = wasInLeftHand;
-					}
-
-					// Equip the herb pipe to the correct game hand after a 20ms delay
-					std::thread equipThread(DelayedEquipWeaponThread, herbWeaponFormId, equipToGameLeftHand, 20);
+					// Equip to the same hand as the empty pipe was
+					// Use game hand (wasInLeftHand/wasInRightHand) for equip since EquipItem uses game hands
+					bool equipToGameLeft = wasInLeftHand;
+					std::thread equipThread(DelayedEquipWeaponThread, herbWeaponFormId, equipToGameLeft, 20);
 					equipThread.detach();
-					_MESSAGE("[PipeFill] Scheduled %s to equip to game %s hand in 20ms", herbPipeName, equipToGameLeftHand ? "LEFT" : "RIGHT");
-				}
-				else
-				{
-					_MESSAGE("[PipeFill] ERROR: Herb weapon form %08X not found!", herbWeaponFormId);
-					// Reset the skip flag since we failed
-					g_skipFingerRestoreOnUnequip = false;
+					_MESSAGE("[PipeFill] Scheduled %s to equip to game %s hand in 20ms", herbPipeBaseName, equipToGameLeft ? "LEFT" : "RIGHT");
+					
+					// Set the display name with category suffix AFTER equipping (100ms delay to ensure equip completes first)
+					if (smokableCategory != SmokableCategory::None)
+					{
+						std::thread nameThread(DelayedSetWeaponNameThread, herbWeaponFormId, herbPipeBaseName, smokableCategory, 100);
+						nameThread.detach();
+						_MESSAGE("[PipeFill] Scheduled weapon name update in 100ms");
+					}
 				}
 			}
-		}
-		else
-		{
-			_MESSAGE("[PipeFill] ERROR: No herb weapon form ID available!");
-			// Reset the skip flag since we failed
-			g_skipFingerRestoreOnUnequip = false;
+			else
+			{
+				_MESSAGE("[PipeFill] ERROR: Herb-filled pipe weapon form %08X not found!", herbWeaponFormId);
+			}
 		}
 	}
 
@@ -895,7 +930,74 @@ namespace InteractivePipeSmokingVR
 	}
 
 	// ============================================
-	// Equip Empty Wooden Pipe (for crafting)
+	// Add Empty Wooden Pipe to inventory (pre-load for crafting)
+	// Now checks for existing empty wooden pipe in inventory/equipped and skips adding if present
+	// ============================================
+	void EquipStateManager::AddEmptyWoodenPipeToInventory()
+	{
+		Actor* player = (*g_thePlayer);
+		if (!player)
+		{
+			_MESSAGE("[Crafting] Player not available");
+			return;
+		}
+
+		// If player already has an empty wooden pipe (equipped or in inventory), skip adding
+		if (PlayerHasEmptyPipeOfType(player, true))
+		{
+			_MESSAGE("[Crafting] Player already has an Empty Wooden Pipe - skipping pre-add");
+			return;
+		}
+
+		TESForm* emptyPipeForm = LookupFormByID(g_emptyWoodenPipeWeaponFullFormId);
+		if (emptyPipeForm)
+		{
+			TESObjectREFR* playerRef = static_cast<TESObjectREFR*>(player);
+			AddItem_Native(nullptr,0, playerRef, emptyPipeForm,1, true);
+			_MESSAGE("[Crafting] Pre-added Empty Wooden Pipe to inventory");
+		}
+		else
+		{
+			_MESSAGE("[Crafting] ERROR: Empty Wooden Pipe form %08X not found!", g_emptyWoodenPipeWeaponFullFormId);
+		}
+	}
+
+	// ============================================
+	// Add Empty Bone Pipe to inventory (pre-load for crafting)
+	// Now checks for existing empty bone pipe in inventory/equipped and skips adding if present
+	// ============================================
+	void EquipStateManager::AddEmptyBonePipeToInventory()
+	{
+		Actor* player = (*g_thePlayer);
+		if (!player)
+		{
+			_MESSAGE("[Crafting] Player not available");
+			return;
+		}
+
+		// If player already has an empty bone pipe (equipped or in inventory), skip adding
+		if (PlayerHasEmptyPipeOfType(player, false))
+		{
+			_MESSAGE("[Crafting] Player already has an Empty Bone Pipe - skipping pre-add");
+			return;
+		}
+
+		TESForm* emptyPipeForm = LookupFormByID(g_emptyBonePipeWeaponFullFormId);
+		if (emptyPipeForm)
+		{
+			TESObjectREFR* playerRef = static_cast<TESObjectREFR*>(player);
+			AddItem_Native(nullptr,0, playerRef, emptyPipeForm,1, true);
+			_MESSAGE("[Crafting] Pre-added Empty Bone Pipe to inventory");
+		}
+		else
+		{
+			_MESSAGE("[Crafting] ERROR: Empty Bone Pipe form %08X not found!", g_emptyBonePipeWeaponFullFormId);
+		}
+	}
+
+	// ============================================
+	// Equip Empty Wooden Pipe (adds to inventory and equips)
+	// If player already has one, use the existing inventory/equipped pipe instead of adding a new one
 	// ============================================
 	void EquipStateManager::EquipEmptyWoodenPipe(bool inLeftHand)
 	{
@@ -906,20 +1008,36 @@ namespace InteractivePipeSmokingVR
 			return;
 		}
 
+		// If it's already equipped in the target game hand, nothing to do
+		TESForm* equipped = player->GetEquippedObject(inLeftHand);
+		if (equipped && IsEmptyWoodenPipeWeapon(equipped->formID))
+		{
+			_MESSAGE("[Crafting] Empty Wooden Pipe already equipped in target hand - skipping");
+			return;
+		}
+
+		// If player already has an empty wooden pipe somewhere (equipped in other hand or in inventory), equip from inventory
+		if (PlayerHasEmptyPipeOfType(player, true))
+		{
+			_MESSAGE("[Crafting] Player already owns an Empty Wooden Pipe - equipping existing one");
+			EquipEmptyWoodenPipeFromInventory(inLeftHand);
+			return;
+		}
+
 		_MESSAGE("[Crafting] Equipping Empty Wooden Pipe to %s hand", inLeftHand ? "LEFT" : "RIGHT");
 
-		// Add empty wooden pipe weapon to inventory
+		// Add empty wooden pipe weapon to inventory and equip
 		TESForm* emptyPipeForm = LookupFormByID(g_emptyWoodenPipeWeaponFullFormId);
 		if (emptyPipeForm)
 		{
 			TESObjectREFR* playerRef = static_cast<TESObjectREFR*>(player);
-			AddItem_Native(nullptr, 0, playerRef, emptyPipeForm, 1, true);
+			AddItem_Native(nullptr,0, playerRef, emptyPipeForm,1, true);
 			_MESSAGE("[Crafting] Added Empty Wooden Pipe to inventory");
 
 			// Equip after a short delay
-			std::thread equipThread(DelayedEquipWeaponThread, g_emptyWoodenPipeWeaponFullFormId, inLeftHand, 15);
+			std::thread equipThread(DelayedEquipWeaponThread, g_emptyWoodenPipeWeaponFullFormId, inLeftHand,15);
 			equipThread.detach();
-			_MESSAGE("[Crafting] Scheduled Empty Wooden Pipe to equip to %s hand in 15ms", inLeftHand ? "LEFT" : "RIGHT");
+			_MESSAGE("[Crafting] Scheduled Empty Wooden Pipe to equip to %s hand in15ms", inLeftHand ? "LEFT" : "RIGHT");
 		}
 		else
 		{
@@ -928,7 +1046,21 @@ namespace InteractivePipeSmokingVR
 	}
 
 	// ============================================
+	// Equip Empty Wooden Pipe from inventory (assumes already added)
+	// ============================================
+	void EquipStateManager::EquipEmptyWoodenPipeFromInventory(bool inLeftHand)
+	{
+		_MESSAGE("[Crafting] Equipping Empty Wooden Pipe from inventory to %s hand", inLeftHand ? "LEFT" : "RIGHT");
+
+		// Equip after a short delay (item should already be in inventory)
+		std::thread equipThread(DelayedEquipWeaponThread, g_emptyWoodenPipeWeaponFullFormId, inLeftHand, 15);
+		equipThread.detach();
+		_MESSAGE("[Crafting] Scheduled Empty Wooden Pipe to equip to %s hand in 15ms", inLeftHand ? "LEFT" : "RIGHT");
+	}
+
+	// ============================================
 	// Equip Empty Bone Pipe (for crafting)
+	// If player already has one, use the existing inventory/equipped pipe instead of adding a new one
 	// ============================================
 	void EquipStateManager::EquipEmptyBonePipe(bool inLeftHand)
 	{
@@ -939,25 +1071,54 @@ namespace InteractivePipeSmokingVR
 			return;
 		}
 
+		// If it's already equipped in the target game hand, nothing to do
+		TESForm* equipped = player->GetEquippedObject(inLeftHand);
+		if (equipped && IsEmptyBonePipeWeapon(equipped->formID))
+		{
+			_MESSAGE("[Crafting] Empty Bone Pipe already equipped in target hand - skipping");
+			return;
+		}
+
+		// If player already has an empty bone pipe somewhere (equipped in other hand or in inventory), equip from inventory
+		if (PlayerHasEmptyPipeOfType(player, false))
+		{
+			_MESSAGE("[Crafting] Player already owns an Empty Bone Pipe - equipping existing one");
+			EquipEmptyBonePipeFromInventory(inLeftHand);
+			return;
+		}
+
 		_MESSAGE("[Crafting] Equipping Empty Bone Pipe to %s hand", inLeftHand ? "LEFT" : "RIGHT");
 
-		// Add empty bone pipe weapon to inventory
+		// Add empty bone pipe weapon to inventory and equip
 		TESForm* emptyPipeForm = LookupFormByID(g_emptyBonePipeWeaponFullFormId);
 		if (emptyPipeForm)
 		{
 			TESObjectREFR* playerRef = static_cast<TESObjectREFR*>(player);
-			AddItem_Native(nullptr, 0, playerRef, emptyPipeForm, 1, true);
+			AddItem_Native(nullptr,0, playerRef, emptyPipeForm,1, true);
 			_MESSAGE("[Crafting] Added Empty Bone Pipe to inventory");
 
 			// Equip after a short delay
-			std::thread equipThread(DelayedEquipWeaponThread, g_emptyBonePipeWeaponFullFormId, inLeftHand, 15);
+			std::thread equipThread(DelayedEquipWeaponThread, g_emptyBonePipeWeaponFullFormId, inLeftHand,15);
 			equipThread.detach();
-			_MESSAGE("[Crafting] Scheduled Empty Bone Pipe to equip to %s hand in 15ms", inLeftHand ? "LEFT" : "RIGHT");
+			_MESSAGE("[Crafting] Scheduled Empty Bone Pipe to equip to %s hand in15ms", inLeftHand ? "LEFT" : "RIGHT");
 		}
 		else
 		{
 			_MESSAGE("[Crafting] ERROR: Empty Bone Pipe form %08X not found!", g_emptyBonePipeWeaponFullFormId);
 		}
+	}
+
+	// ============================================
+	// Equip Empty Bone Pipe from inventory (assumes already added)
+	// ============================================
+	void EquipStateManager::EquipEmptyBonePipeFromInventory(bool inLeftHand)
+	{
+		_MESSAGE("[Crafting] Equipping Empty Bone Pipe from inventory to %s hand", inLeftHand ? "LEFT" : "RIGHT");
+
+		// Equip after a short delay (item should already be in inventory)
+		std::thread equipThread(DelayedEquipWeaponThread, g_emptyBonePipeWeaponFullFormId, inLeftHand, 15);
+		equipThread.detach();
+		_MESSAGE("[Crafting] Scheduled Empty Bone Pipe to equip to %s hand in 15ms", inLeftHand ? "LEFT" : "RIGHT");
 	}
 
 	// ============================================
@@ -974,12 +1135,6 @@ namespace InteractivePipeSmokingVR
 
 		_MESSAGE("[SmokeRolling] Equipping Unlit Rolled Smoke to %s hand", inLeftHand ? "LEFT" : "RIGHT");
 
-		// Set the display name with category suffix BEFORE equipping
-		if (g_rolledSmokeWeaponFullFormId != 0 && g_filledRolledSmokeSmokableCategory != SmokableCategory::None)
-		{
-			SetWeaponDisplayName(g_rolledSmokeWeaponFullFormId, "Rolled Smoke", g_filledRolledSmokeSmokableCategory);
-		}
-
 		// Add unlit rolled smoke weapon to inventory
 		TESForm* rolledSmokeForm = LookupFormByID(g_rolledSmokeWeaponFullFormId);
 		if (rolledSmokeForm)
@@ -992,6 +1147,14 @@ namespace InteractivePipeSmokingVR
 			std::thread equipThread(DelayedEquipWeaponThread, g_rolledSmokeWeaponFullFormId, inLeftHand, 20);
 			equipThread.detach();
 			_MESSAGE("[SmokeRolling] Scheduled Unlit Rolled Smoke to equip to %s hand in 20ms", inLeftHand ? "LEFT" : "RIGHT");
+			
+			// Set the display name with category suffix AFTER equipping (100ms delay to ensure equip completes first)
+			if (g_filledRolledSmokeSmokableCategory != SmokableCategory::None)
+			{
+				std::thread nameThread(DelayedSetWeaponNameThread, g_rolledSmokeWeaponFullFormId, "Rolled Smoke", g_filledRolledSmokeSmokableCategory, 100);
+				nameThread.detach();
+				_MESSAGE("[SmokeRolling] Scheduled weapon name update in 100ms");
+			}
 		}
 		else
 		{
@@ -1042,6 +1205,9 @@ namespace InteractivePipeSmokingVR
 				litName = "Wooden Pipe Lit";
 				isWoodenPipe = true;
 				_MESSAGE("[Lighting] Detected WOODEN herb pipe to light");
+				_MESSAGE("[Lighting]   -> Equipped item formID: %08X", equippedItem->formID);
+				_MESSAGE("[Lighting]   -> Unlit weapon formID: %08X", unlitWeaponFormId);
+				_MESSAGE("[Lighting]   -> Lit weapon formID: %08X", litWeaponFormId);
 			}
 			else if (IsHerbBonePipeWeapon(equippedItem->formID))
 			{
@@ -1052,7 +1218,20 @@ namespace InteractivePipeSmokingVR
 				litName = "Bone Pipe Lit";
 				isBonePipe = true;
 				_MESSAGE("[Lighting] Detected BONE herb pipe to light");
+				_MESSAGE("[Lighting]   -> Equipped item formID: %08X", equippedItem->formID);
+				_MESSAGE("[Lighting]   -> Unlit weapon formID: %08X", unlitWeaponFormId);
+				_MESSAGE("[Lighting]   -> Lit weapon formID: %08X", litWeaponFormId);
 			}
+			else
+			{
+				_MESSAGE("[Lighting] WARNING: Equipped item %08X is NOT a recognized herb pipe!", equippedItem->formID);
+				_MESSAGE("[Lighting]   -> Expected Wooden: %08X or %08X", HERB_WOODEN_PIPE_WEAPON_BASE_FORMID, g_herbWoodenPipeWeaponFullFormId);
+				_MESSAGE("[Lighting]   -> Expected Bone: %08X or %08X", HERB_BONE_PIPE_WEAPON_BASE_FORMID, g_herbBonePipeWeaponFullFormId);
+			}
+		}
+		else
+		{
+			_MESSAGE("[Lighting] WARNING: No item equipped in specified hand!");
 		}
 
 		if (unlitWeaponFormId == 0 || litWeaponFormId == 0)
@@ -1459,8 +1638,7 @@ namespace InteractivePipeSmokingVR
 				float ring1 = 0.000000f, ring2 = 0.020000f;
 				float pinky1 = 0.000000f, pinky2 = 0.000000f;
 
-				vrikInterface->setFingerRange(isLeftVRController, 
-					thumb1, thumb2, index1, index2, middle1, middle2, ring1, ring2, pinky1, pinky2);
+				vrikInterface->setFingerRange(isLeftVRController, thumb1, thumb2, index1, index2, middle1, middle2, ring1, ring2, pinky1, pinky2);
 			}
 
 			g_equippedSmokeItemCount++;
@@ -1693,7 +1871,7 @@ namespace InteractivePipeSmokingVR
 						AddItem_Native(nullptr, 0, playerRef, armorForm, 1, true);
 						std::thread equipThread(DelayedEquipThread, visualArmorFormId, 20);
 						equipThread.detach();
-					}
+						}
 				}
 			}
 
@@ -1804,7 +1982,7 @@ namespace InteractivePipeSmokingVR
 
 		if (isEquip)
 		{
-			UInt32 visualArmorFormId = vrLeftController ? g_smokeLitVisualLeftArmorFullFormId : g_smokeLitVisualRightArmorFullFormId;
+			UInt32 visualArmorFormId = vrLeftController ? g_woodenPipeLitVisualLeftArmorFullFormId : g_woodenPipeLitVisualRightArmorFullFormId;
 
 			if (visualArmorFormId != 0)
 			{
@@ -1812,14 +1990,14 @@ namespace InteractivePipeSmokingVR
 				if (armorForm)
 				{
 					Actor* player = (*g_thePlayer);
-					if ( player)
+					if (player)
 					{
 						TESObjectREFR* playerRef = static_cast<TESObjectREFR*>(player);
 						AddItem_Native(nullptr, 0, playerRef, armorForm, 1, true);
-						std::thread equipThread(DelayedEquipThread, visualArmorFormId, 50);
+						std::thread equipThread(DelayedEquipThread, visualArmorFormId, 25);
 						equipThread.detach();
-						}
-			}
+					}
+				}
 			}
 
 			// Use VR controller hand for VRIK
@@ -1832,8 +2010,6 @@ namespace InteractivePipeSmokingVR
 					0.020000f, 0.010000f,
 					0.000000f, 0.020000f,
 					0.000000f, 0.000000f);
-				_MESSAGE("[EquipState] Set VRIK finger range for %s VR controller (wooden pipe lit, game hand=%s)", 
-					isLeftVRController ? "LEFT" : "RIGHT", HandStr(inLeftHand, inRightHand));
 			}
 
 			// Use VR controller hands for tracking
@@ -1944,9 +2120,7 @@ namespace InteractivePipeSmokingVR
 				float middle1 = 0.020000f, middle2 = 0.010000f;
 				float ring1 = 0.000000f, ring2 = 0.020000f;
 				float pinky1 = 0.000000f, pinky2 = 0.000000f;
-
-				vrikInterface->setFingerRange(isLeftVRController, 
-					thumb1, thumb2, index1, index2, middle1, middle2, ring1, ring2, pinky1, pinky2);
+				vrikInterface->setFingerRange(isLeftVRController, thumb1, thumb2, index1, index2, middle1, middle2, ring1, ring2, pinky1, pinky2);
 			}
 
 			g_equippedSmokeItemCount++;

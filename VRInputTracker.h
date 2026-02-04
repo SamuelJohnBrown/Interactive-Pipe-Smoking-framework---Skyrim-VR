@@ -64,6 +64,18 @@ namespace InteractivePipeSmokingVR
 		// Check if controllers are touching
 		bool AreControllersTouching() const { return m_controllersTouching; }
 
+		// Check if controllers are near enough for pipe filling (uses separate radius)
+		bool AreControllersNearForPipeFilling() const { return m_controllersNearForPipeFilling; }
+
+		// Check if controllers are near enough for smoke rolling (uses separate radius)
+		bool AreControllersNearForSmokeRolling() const { return m_controllersNearForSmokeRolling; }
+
+		// Check if controllers are near enough for pipe lighting (uses separate radius)
+		bool AreControllersNearForPipeLighting() const { return m_controllersNearForPipeLighting; }
+
+		// Check if controllers are near enough for rolled smoke lighting (uses larger radius)
+		bool AreControllersNearForRolledSmokeLighting() const { return m_controllersNearForRolledSmokeLighting; }
+
 		// Get how long controllers have been touching (in milliseconds), returns 0 if not touching
 		int GetControllersTouchingDurationMs() const;
 
@@ -133,6 +145,10 @@ namespace InteractivePipeSmokingVR
 		// Controllers touching state
 		bool m_controllersTouching;
 		bool m_prevControllersTouching;
+		bool m_controllersNearForPipeFilling;  // Separate check with pipe filling radius
+		bool m_controllersNearForSmokeRolling;  // Separate check with smoke rolling radius
+		bool m_controllersNearForPipeLighting;  // Separate check with pipe lighting radius
+		bool m_controllersNearForRolledSmokeLighting;  // Separate check with rolled smoke lighting radius
 		std::chrono::steady_clock::time_point m_controllersTouchStartTime;
 
 		// Fire spell equipped state

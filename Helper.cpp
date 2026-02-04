@@ -10,6 +10,10 @@ namespace InteractivePipeSmokingVR
 	typedef void(*_RemoveItem_Native)(VMClassRegistry* registry, UInt32 stackId, TESObjectREFR* akSource, TESForm* akItemToRemove, SInt32 aiCount, bool abSilent, TESObjectREFR* akOtherContainer);
 	RelocAddr<_RemoveItem_Native> RemoveItem_Native(0x009D1190);
 
+	// Papyrus ObjectReference.Delete function signature
+	typedef void (*_DeleteObject)(VMClassRegistry* registry, UInt32 stackId, TESObjectREFR* obj);
+	static RelocAddr<_DeleteObject> DeleteObject_Native(0x009CE380);
+
 	// RestoreActorValue native function address (Papyrus Actor.RestoreActorValue)
 	typedef void(*_RestoreActorValue_Native)(VMClassRegistry* registry, UInt32 stackId, Actor* actor, BSFixedString const& valueName, float amount);
 	RelocAddr<_RestoreActorValue_Native> RestoreActorValue_Native(0x0986480);
@@ -201,7 +205,23 @@ namespace InteractivePipeSmokingVR
 		if (!target || !item)
 			return;
 		
-		RemoveItem_Native(nullptr, 0, target, item, count, silent, nullptr);
+		RemoveItem_Native((*g_skyrimVM)->GetClassRegistry(), 0, target, item, count, silent, nullptr);
+	}
+
+	void DeleteWorldObject(TESObjectREFR* objRef)
+	{
+		if (!objRef)
+		{
+			_MESSAGE("[DeleteWorldObject] ERROR: Object reference is null");
+			return;
+		}
+
+		_MESSAGE("[DeleteWorldObject] Deleting world object RefID: %08X", objRef->formID);
+		
+		// Call the Papyrus Delete function
+		DeleteObject_Native((*g_skyrimVM)->GetClassRegistry(), 0, objRef);
+		
+		_MESSAGE("[DeleteWorldObject] Delete command sent for RefID: %08X", objRef->formID);
 	}
 
 	void RestoreActorValue(Actor* actor, const char* valueName, float amount)

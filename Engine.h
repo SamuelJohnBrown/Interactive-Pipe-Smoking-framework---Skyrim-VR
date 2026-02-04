@@ -22,7 +22,7 @@ namespace InteractivePipeSmokingVR
 	extern bool g_higgsMouthRadiusModified;
 
 	// ESP plugin name
-	constexpr const char* ESP_NAME = "Interactive_Herb_Smoking_VR.esp";
+	constexpr const char* ESP_NAME = "Interactive_Pipe_Smoking_VR.esp";
 	
 	// Weapons (dummy items) - UNLIT
 	constexpr UInt32 ROLLED_SMOKE_WEAPON_BASE_FORMID = 0x005902;
@@ -149,6 +149,9 @@ namespace InteractivePipeSmokingVR
 	// Equip event handling
 	void RegisterEquipEventSink();
 	void UnregisterEquipEventSink();
+
+	// HIGGS grab callback registration (called from main.cpp after HIGGS interface is available)
+	void RegisterHiggsGrabCallback();
 
 	// Helpers - UNLIT weapons
 	bool IsRolledSmokeWeapon(UInt32 formId);

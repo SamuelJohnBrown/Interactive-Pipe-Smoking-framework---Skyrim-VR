@@ -41,6 +41,10 @@ namespace InteractivePipeSmokingVR
 	// Item manipulation wrappers
 	void RemoveItemFromInventory(TESObjectREFR* target, TESForm* item, SInt32 count, bool silent);
 
+	// Delete world object (cleanup spawned/dropped items from the world)
+	// This calls Papyrus ObjectReference.Delete to remove the reference from the game
+	void DeleteWorldObject(TESObjectREFR* objRef);
+
 	// Actor value manipulation wrappers
 	void RestoreActorValue(Actor* actor, const char* valueName, float amount);
 	void DamageActorValue(Actor* actor, const char* valueName, float amount);

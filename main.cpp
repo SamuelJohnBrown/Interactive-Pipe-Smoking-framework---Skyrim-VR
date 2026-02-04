@@ -143,9 +143,8 @@ namespace InteractivePipeSmokingVR
 					if (higgsInterface)
 					{
 						_MESSAGE("Got HIGGS interface. Buildnumber: %d", higgsInterface->GetBuildNumber());
-						
-						// Initialize pipe crafting system (registers HIGGS callbacks)
-						InitializePipeCrafting();
+						// NOTE: HIGGS callbacks are registered later in kMessage_DataLoaded
+						// after the ESP is loaded and form IDs are resolved
 					}
 					else
 					{

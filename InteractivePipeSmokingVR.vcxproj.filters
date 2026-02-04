@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Engine.cpp" />
+    <ClCompile Include="RandomSelector.cpp" />
+    <ClCompile Include="config.cpp" />
+    <ClCompile Include="higgsinterface001.cpp" />
+    <ClCompile Include="SkyrimVRESLAPI.cpp" />
+    <ClCompile Include="vrikinterface001.cpp" />
+    <ClCompile Include="Helper.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Utility.hpp" />
+    <ClInclude Include="Engine.h" />
+    <ClInclude Include="dirent.h" />
+    <ClInclude Include="config.h" />
+    <ClInclude Include="higgsinterface001.h" />
+    <ClInclude Include="SkyrimVRESLAPI.h" />
+    <ClInclude Include="vrikinterface001.h" />
+    <ClInclude Include="Helper.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="BarebonesVR.def" />
+  </ItemGroup>
+</Project>

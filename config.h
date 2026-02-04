@@ -34,6 +34,10 @@ namespace InteractivePipeSmokingVR {
 
 	// Controller touch detection
 	extern float configControllerTouchRadius;  // Distance threshold for controllers "touching"
+	extern float configRolledSmokeLightingRadius;  // Larger distance for rolled smoke ignition with flames
+	extern float configPipeLightingRadius;  // Distance for herb pipe lighting with flames
+	extern float configPipeFillingRadius;  // Distance for pipe filling detection
+	extern float configSmokeRollingRadius;  // Distance for smoke rolling (creating rolled smoke)
 
 	// Near clip restore delay (milliseconds)
 	extern int configNearClipRestoreDelayMs;

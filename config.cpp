@@ -15,6 +15,10 @@ namespace InteractivePipeSmokingVR {
 
 	// Controller touch detection
 	float configControllerTouchRadius = 10.0f;  // Distance threshold for controllers "touching"
+	float configRolledSmokeLightingRadius = 18.0f;  // Larger distance for rolled smoke ignition with flames
+	float configPipeLightingRadius = 13.0f;  // Distance for herb pipe lighting with flames
+	float configPipeFillingRadius = 13.0f;  // Distance for pipe filling detection
+	float configSmokeRollingRadius = 13.0f;  // Distance for smoke rolling (creating rolled smoke)
 
 	// Near clip restore delay (milliseconds) - how long to wait after leaving face zone before restoring near clip
 	int configNearClipRestoreDelayMs = 2000;  // 2 seconds default
@@ -50,14 +54,14 @@ namespace InteractivePipeSmokingVR {
 
         if (!runtimeDirectory.empty()) 
 		{
-			std::string filepath = runtimeDirectory + "Data\\SKSE\\Plugins\\InteractiveHerbSmokingVR.ini";
+			std::string filepath = runtimeDirectory + "Data\\SKSE\\Plugins\\InteractivePipeSmokingVR.ini";
 			std::ifstream file(filepath);
 
 			if (!file.is_open()) 
-            {
+       {
 				transform(filepath.begin(), filepath.end(), filepath.begin(), ::tolower);
 				file.open(filepath);
-     }
+       }
 
 			if (file.is_open()) 
 			{
@@ -109,6 +113,22 @@ namespace InteractivePipeSmokingVR {
 						else if (variableName == "ControllerTouchRadius")
 						{
 							configControllerTouchRadius = std::stof(variableValueStr);
+						}
+						else if (variableName == "RolledSmokeLightingRadius")
+						{
+							configRolledSmokeLightingRadius = std::stof(variableValueStr);
+						}
+						else if (variableName == "PipeLightingRadius")
+						{
+							configPipeLightingRadius = std::stof(variableValueStr);
+						}
+						else if (variableName == "PipeFillingRadius")
+						{
+							configPipeFillingRadius = std::stof(variableValueStr);
+						}
+						else if (variableName == "SmokeRollingRadius")
+						{
+							configSmokeRollingRadius = std::stof(variableValueStr);
 						}
 						else if (variableName == "NearClipRestoreDelayMs")
 						{

@@ -6,6 +6,7 @@
 #include "VRInputTracker.h"
 #include "config.h"
 #include "higgsinterface001.h"
+#include "Helper.h"
 #include "skse64/GameObjects.h"
 #include "skse64/GameRTTI.h"
 #include "skse64/NiNodes.h"
@@ -212,19 +213,26 @@ namespace InteractivePipeSmokingVR
 		// WeaponType: 0=HandToHand, 1=OneHandSword, 2=OneHandDagger, 3=OneHandAxe, etc.
 		UInt8 weaponType = weapon->gameData.type;
 		
-		// Type 2 is OneHandDagger
-		if (weaponType == 2)
-			return true;
-
-		// Also check by keyword or name for modded daggers/knives
+		// Get weapon name for logging/fallback check
 		const char* name = weapon->fullName.GetName();
+		
+		// Type 2 is OneHandDagger - this catches ALL daggers regardless of name
+		if (weaponType == 2)
+		{
+			_MESSAGE("[IsKnifeOrDagger] Detected dagger by weapon type (type=2): '%s'", name ? name : "Unknown");
+			return true;
+		}
+
+		// Fallback: Also check by name for modded weapons that might have wrong type
 		if (name)
 		{
 			// Case-insensitive check for common knife/dagger names
 			if (strstr(name, "Dagger") || strstr(name, "dagger") ||
 				strstr(name, "Knife") || strstr(name, "knife") ||
-				strstr(name, "Shiv") || strstr(name, "shiv"))
+				strstr(name, "Shiv") || strstr(name, "shiv") ||
+				strstr(name, "DAGGER") || strstr(name, "KNIFE") || strstr(name, "SHIV"))
 			{
+				_MESSAGE("[IsKnifeOrDagger] Detected dagger by name: '%s' (type=%d)", name, weaponType);
 				return true;
 			}
 		}
@@ -507,6 +515,21 @@ namespace InteractivePipeSmokingVR
 		_MESSAGE("[PipeCrafting]   -> Hit count: %d / %d", g_craftingHitCount, CRAFTING_HITS_REQUIRED);
 		_MESSAGE("[PipeCrafting]   -> New scale: %.0f%% (shrunk by 20%%)", *currentScale * 100.0f);
 
+		// On the SECOND hit, pre-add the pipe to inventory so it's ready when crafting completes
+		if (g_craftingHitCount == 2 && g_equipStateManager)
+		{
+			if (materialType == CraftingMaterialType::Bone)
+			{
+				g_equipStateManager->AddEmptyBonePipeToInventory();
+				_MESSAGE("[PipeCrafting]   -> Pre-added Empty Bone Pipe to inventory (will equip on final hit)");
+			}
+			else
+			{
+				g_equipStateManager->AddEmptyWoodenPipeToInventory();
+				_MESSAGE("[PipeCrafting]   -> Pre-added Empty Wooden Pipe to inventory (will equip on final hit)");
+			}
+		}
+
 		// Check if we've reached the required hits
 		if (g_craftingHitCount >= CRAFTING_HITS_REQUIRED)
 		{
@@ -520,6 +543,9 @@ namespace InteractivePipeSmokingVR
 			{
 				ShrinkCraftingItem(heldItem, 0.0f);
 				_MESSAGE("[PipeCrafting]   -> Scaled %s to 0 (hidden)", itemName);
+				
+				// Delete the world object to clean it up properly
+				DeleteWorldObject(heldItem);
 			}
 
 			// Clear the held crafting item reference (using VR controller hand)
@@ -535,7 +561,7 @@ namespace InteractivePipeSmokingVR
 			}
 
 			// Equip the appropriate pipe to the hand that was holding the crafting material
-			// VR controller hand is used directly since HIGGS uses VR controller hands
+			// The pipe was already added to inventory on hit 2, so just equip it now
 			if (g_equipStateManager)
 			{
 				// Convert VR controller hand to game hand for equipping
@@ -553,14 +579,15 @@ namespace InteractivePipeSmokingVR
 					equipToGameLeftHand = itemInLeftVRController;
 				}
 
+				// Equip the pipe (it's already in inventory from hit 2)
 				if (materialType == CraftingMaterialType::Bone)
 				{
-					g_equipStateManager->EquipEmptyBonePipe(equipToGameLeftHand);
+					g_equipStateManager->EquipEmptyBonePipeFromInventory(equipToGameLeftHand);
 					_MESSAGE("[PipeCrafting]   -> Equipped Empty Bone Pipe to game %s hand", equipToGameLeftHand ? "LEFT" : "RIGHT");
 				}
 				else
 				{
-					g_equipStateManager->EquipEmptyWoodenPipe(equipToGameLeftHand);
+					g_equipStateManager->EquipEmptyWoodenPipeFromInventory(equipToGameLeftHand);
 					_MESSAGE("[PipeCrafting]   -> Equipped Empty Wooden Pipe to game %s hand", equipToGameLeftHand ? "LEFT" : "RIGHT");
 				}
 			}
@@ -614,6 +641,7 @@ namespace InteractivePipeSmokingVR
 			_MESSAGE("[PipeGrab] *** EMPTY WOODEN PIPE MISC ITEM GRABBED in %s VR controller ***", handStr);
 
 			ShrinkCraftingItem(grabbedRefr, 0.0f);
+			DeleteWorldObject(grabbedRefr);
 
 			bool equipToGameLeftHand = IsLeftHandedMode() ? !isLeft : isLeft;
 			
@@ -631,6 +659,7 @@ namespace InteractivePipeSmokingVR
 			_MESSAGE("[PipeGrab] *** EMPTY BONE PIPE MISC ITEM GRABBED in %s VR controller ***", handStr);
 
 			ShrinkCraftingItem(grabbedRefr, 0.0f);
+			DeleteWorldObject(grabbedRefr);
 
 			bool equipToGameLeftHand = IsLeftHandedMode() ? !isLeft : isLeft;
 			
@@ -749,12 +778,12 @@ namespace InteractivePipeSmokingVR
 		// Check smoke rolling completion: dropping smokable while holding Roll of Paper + controllers touching
 		if (droppedSmokable && droppedSmokableRefr && hasRollOfPaper)
 		{
-			bool controllersTouching = g_vrInputTracker && g_vrInputTracker->AreControllersTouching();
+			bool controllersNearForRolling = g_vrInputTracker && g_vrInputTracker->AreControllersNearForSmokeRolling();
 
-			_MESSAGE("[SmokeRolling Drop DEBUG] hasRollOfPaperLeft=%d hasRollOfPaperRight=%d controllersTouching=%d",
-				hasRollOfPaperLeft ? 1 : 0, hasRollOfPaperRight ? 1 : 0, controllersTouching ? 1 : 0);
+			_MESSAGE("[SmokeRolling Drop DEBUG] hasRollOfPaperLeft=%d hasRollOfPaperRight=%d controllersNearForRolling=%d",
+				hasRollOfPaperLeft ? 1 : 0, hasRollOfPaperRight ? 1 : 0, controllersNearForRolling ? 1 : 0);
 
-			if (controllersTouching)
+			if (controllersNearForRolling)
 			{
 				// Get smokable info before clearing
 				if (droppedSmokableRefr->baseForm)
@@ -861,7 +890,7 @@ namespace InteractivePipeSmokingVR
 		if (isLeft && g_heldRollOfPaperLeft != nullptr)
 		{
 			rollOfPaper = g_heldRollOfPaperLeft;
-			wasRollOfPaper = true;
+		wasRollOfPaper = true;
 			g_heldRollOfPaperLeft = nullptr;
 			g_rollOfPaperHeldLeft = false;
 			_MESSAGE("[SmokeRolling] LEFT hand dropped Roll of Paper");
@@ -969,7 +998,7 @@ namespace InteractivePipeSmokingVR
 
 	// ============================================
 	// Check Smoke Rolling Condition
-	// Player needs: Roll of Paper in one hand + Smokable ingredient in other hand + hands touching
+	// Player needs: Roll of Paper in one hand + Smokable ingredient in other hand + hands near enough
 	// ============================================
 	void CheckSmokeRollingCondition()
 	{
@@ -997,8 +1026,10 @@ namespace InteractivePipeSmokingVR
 			return;
 		}
 
-		// Check if controllers have been touching long enough (using global flag set by VRInputTracker)
-		if (!g_controllersTouchingLongEnough)
+		// Check if controllers are near enough for smoke rolling (uses separate radius)
+		bool controllersNearForRolling = g_vrInputTracker && g_vrInputTracker->AreControllersNearForSmokeRolling();
+		
+		if (!controllersNearForRolling)
 		{
 			g_smokeRollingConditionLogged = false;
 			return;
@@ -1028,7 +1059,7 @@ namespace InteractivePipeSmokingVR
 			_MESSAGE("[SmokeRolling]   -> Roll of Paper in %s hand", hasRollOfPaperLeft ? "LEFT" : "RIGHT");
 			_MESSAGE("[SmokeRolling]   -> Smokable '%s' in %s hand", smokableName, hasSmokableLeft ? "LEFT" : "RIGHT");
 			_MESSAGE("[SmokeRolling]   -> Smokable category: %s", SmokableIngredients::GetCategoryName(smokableCategory));
-			_MESSAGE("[SmokeRolling]   -> Controllers touching long enough: YES");
+			_MESSAGE("[SmokeRolling] -> Controllers near for rolling: YES");
 			_MESSAGE("[SmokeRolling]   -> Continuous haptic feedback started - DROP to roll!");
 		}
 	}
